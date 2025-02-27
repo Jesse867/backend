@@ -1,0 +1,125 @@
+<?php
+header("Content-Type: application/json");
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+require "db.php"; 
+require "send_email.php";
+
+// Read and decode JSON input
+$json = file_get_contents("php://input");
+$data = json_decode($json, true);
+
+if (!$data) {
+    echo json_encode(["error" => "Invalid JSON input"]);
+    exit;
+}
+
+// List required fields (adjust as needed)
+$required = [
+    "firstName", "lastName", "dateOfBirth", "gender", "primaryPhoneNumber",
+    "email", "residentialAddress", "emergencyContact", "maritalStatus",
+    "consentForDataUsage", "password", "confirmPassword"
+];
+
+foreach ($required as $field) {
+    if (!isset($data[$field])) {
+        echo json_encode(["error" => "Missing field: $field"]);
+        exit;
+    }
+}
+
+// Check password match
+if ($data["password"] !== $data["confirmPassword"]) {
+    echo json_encode(["error" => "Passwords do not match"]);
+    exit;
+}
+
+// Retrieve and sanitize values
+$firstName   = trim($data["firstName"]);
+$middleName  = isset($data["middleName"]) ? trim($data["middleName"]) : "";
+$lastName    = trim($data["lastName"]);
+$dateOfBirth = trim($data["dateOfBirth"]); // Format: YYYY-MM-DD
+$gender      = trim($data["gender"]);
+$photoUpload = isset($data["photoUpload"]) ? trim($data["photoUpload"]) : "";
+$primaryPhoneNumber   = trim($data["primaryPhoneNumber"]);
+$alternatePhoneNumber = isset($data["alternatePhoneNumber"]) ? trim($data["alternatePhoneNumber"]) : "";
+$email       = trim($data["email"]);
+
+// Residential Address (nested object)
+$resAddress  = $data["residentialAddress"];
+$street      = trim($resAddress["street"]);
+$city        = trim($resAddress["city"]);
+$state       = trim($resAddress["state"]);
+$country     = trim($resAddress["country"]);
+
+// Emergency Contact (nested object)
+$emergency   = $data["emergencyContact"];
+$emergencyName         = trim($emergency["name"]);
+$emergencyRelationship = trim($emergency["relationship"]);
+$emergencyPhone        = trim($emergency["phoneNumber"]);
+
+// Medical Information (optional)
+$bloodGroup             = isset($data["bloodGroup"]) ? trim($data["bloodGroup"]) : "";
+$knownAllergies         = isset($data["knownAllergies"]) ? trim($data["knownAllergies"]) : "";
+$preExistingConditions  = isset($data["preExistingConditions"]) ? trim($data["preExistingConditions"]) : "";
+$primaryPhysician       = isset($data["primaryPhysician"]) ? trim($data["primaryPhysician"]) : "";
+
+// Health Insurance (nested object, optional)
+$healthInsurance = isset($data["healthInsurance"]) ? $data["healthInsurance"] : [];
+$insuranceNumber   = isset($healthInsurance["insuranceNumber"]) ? trim($healthInsurance["insuranceNumber"]) : "";
+$insuranceProvider = isset($healthInsurance["provider"]) ? trim($healthInsurance["provider"]) : "";
+
+// Other fields
+$maritalStatus = trim($data["maritalStatus"]);
+$occupation    = isset($data["occupation"]) ? trim($data["occupation"]) : "";
+$consentForDataUsage = $data["consentForDataUsage"] ? 1 : 0;
+
+// Password: hash it
+$password = trim($data["password"]);
+$passwordHash = password_hash($password, PASSWORD_BCRYPT);
+
+// Generate a unique 10-digit hospital number
+$hospitalNumber = str_pad(rand(1000000000, 9999999999), 10, '0', STR_PAD_LEFT);
+
+// Validate email
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    echo json_encode(["message" => "Invalid email format"]);
+    exit;
+}
+
+// Check if email exists
+$stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+$stmt->bind_param("s", $email);
+$stmt->execute();
+$stmt->store_result();
+if ($stmt->num_rows > 0) {
+    echo json_encode(["message" => "Email already registered"]);
+    exit;
+}
+
+
+
+// Insert into `users`
+$stmt = $conn->prepare("INSERT INTO users (email, password_hash, role, hospital_number) VALUES (?, ?, 'patient', ?)");
+$stmt->bind_param("sss", $email, $passwordHash, $hospitalNumber);
+if ($stmt->execute()) {
+    $user_id = $stmt->insert_id;
+
+    // Insert into `patients`
+    $stmt = $conn->prepare("INSERT INTO patients (user_id, first_name, middle_name, last_name, date_of_birth, gender, photo_upload, primary_phone_number, alternate_phone_number, street, city, state, country, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, blood_group, known_allergies, pre_existing_conditions, primary_physician, insurance_number, insurance_provider, marital_status, occupation, consent_for_data_usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("isssssssssssssssssssssssi", $user_id, $firstName, $middleName, $lastName, $dateOfBirth, $gender, $photoUpload, $primaryPhoneNumber, $alternatePhoneNumber, $street, $city, $state, $country, $emergencyName, $emergencyRelationship, $emergencyPhone, $bloodGroup, $knownAllergies, $preExistingConditions, $primaryPhysician, $insuranceNumber, $insuranceProvider, $maritalStatus, $occupation, $consentForDataUsage);
+    
+    if ($stmt->execute()) {
+       // Send email with hospital number and password
+        if (sendEmail($email, $hospitalNumber, $password)) {
+            echo json_encode(["message" => ucfirst($role) . " registered successfully. Email sent!", "hospital_number" => $hospitalNumber]);
+        } else {
+            echo json_encode(["message" => "Registration successful, but email failed to send"]);
+        }
+    } else {
+        echo json_encode(["message" => "Error inserting patient details"]);
+    }
+} else {
+    echo json_encode(["message" => "Error registering patient"]);
+}
+?>

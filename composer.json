@@ -1,0 +1,6 @@
+{
+    "require": {
+        "phpmailer/phpmailer": "^6.9",
+        "mailchimp/transactional": "^1.0"
+    }
+}
