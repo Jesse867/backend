@@ -2,8 +2,11 @@
 header("Content-Type: application/json");
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-require "db.php"; 
-require "send_email.php";
+require "db.php";
+//Email configuration
+require "PHPMailer/src/PHPMailer.php";
+require "PHPMailer/src/SMTP.php";
+require "PHPMailer/src/Exception.php";
 
 // Read and decode JSON input
 $json = file_get_contents("php://input");
@@ -97,8 +100,6 @@ if ($stmt->num_rows > 0) {
     exit;
 }
 
-
-
 // Insert into `users`
 $stmt = $conn->prepare("INSERT INTO users (email, password_hash, role, hospital_number) VALUES (?, ?, 'patient', ?)");
 $stmt->bind_param("sss", $email, $passwordHash, $hospitalNumber);
@@ -110,10 +111,41 @@ if ($stmt->execute()) {
     $stmt->bind_param("isssssssssssssssssssssssi", $user_id, $firstName, $middleName, $lastName, $dateOfBirth, $gender, $photoUpload, $primaryPhoneNumber, $alternatePhoneNumber, $street, $city, $state, $country, $emergencyName, $emergencyRelationship, $emergencyPhone, $bloodGroup, $knownAllergies, $preExistingConditions, $primaryPhysician, $insuranceNumber, $insuranceProvider, $maritalStatus, $occupation, $consentForDataUsage);
     
     if ($stmt->execute()) {
-       // Send email with hospital number and password
-        if (sendEmail($email, $hospitalNumber, $password)) {
-            echo json_encode(["message" => ucfirst($role) . " registered successfully. Email sent!", "hospital_number" => $hospitalNumber]);
-        } else {
+        // Send email with hospital number and password
+        try {
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com'; 
+            $mail->SMTPAuth = true;
+            $mail->Username = 'adejsamuel@gmail.com';
+            $mail->Password = 'iyng nqfs zlpj ugah'; 
+            $mail->SMTPSecure = 'tls'; 
+            $mail->Port = 587; 
+
+            $mail->setFrom('your_email@example.com', 'Patient Registration');
+            $mail->addAddress($email);
+
+            // email image implementation
+            $imagePath = 'assets/image/logo-full-light.png'; 
+            $image_cid = 'logo'; 
+            $altText = 'Carpulse Logo'; 
+            $mail->addEmbeddedImage($imagePath, $image_cid, $altText);
+
+            $mail->isHTML(true);
+            $mail->Subject = 'Registration Confirmation';
+            $mail->Body = "
+                <img src='cid:$image_cid' alt='$altText' style='max-width: 150px; height: auto;'>
+                <br>
+                <h2>Thank you for registering with Carepulse!</h2>
+                <p>Your hospital number: $hospitalNumber</p>
+                <p>Your password: $password</p>
+                <p>Please keep this information safe for future reference.</p>
+            ";
+
+            $mail->send();
+            echo json_encode(["message" => "Patient registered successfully. Confirmation email sent!", "hospital_number" => $hospitalNumber]);
+        } catch (Exception $e) {
+            error_log("Email sending failed: " . $e->getMessage());
             echo json_encode(["message" => "Registration successful, but email failed to send"]);
         }
     } else {

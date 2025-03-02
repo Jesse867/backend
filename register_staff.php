@@ -3,7 +3,6 @@ header("Content-Type: application/json");
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require "db.php";
-require "send_email.php";
 
 $json = file_get_contents("php://input");
 $data = json_decode($json, true);
@@ -28,7 +27,7 @@ $phone_number = trim($data['phone_number']);
 $license_number = isset($data['license_number']) ? trim($data['license_number']) : null; // Only needed for doctors/pharmacists
 
 // Validate role
-$valid_roles = ['doctor', 'pharmacist', 'billing_officer', 'receptionist'];
+$valid_roles = ['doctor', 'pharmacist', 'billing_officer', 'receptionist', 'admin'];
 if (!in_array($role, $valid_roles)) {
     echo json_encode(["message" => "Invalid role"]);
     exit;
@@ -63,25 +62,57 @@ $stmt->bind_param("ssss", $email, $hashed_password, $role, $hospital_number);
 if ($stmt->execute()) {
     $user_id = $stmt->insert_id;
 
-    // Correct fields for specific role table
-    if ($role === "doctor" || $role === "pharmacist") {
-        $stmt = $conn->prepare("INSERT INTO {$role}s (user_id, first_name, last_name, phone_number, license_number) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $license_number);
-    } else {
-        $stmt = $conn->prepare("INSERT INTO {$role}s (user_id, first_name, last_name, phone_number) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("isss", $user_id, $first_name, $last_name, $phone_number);
+    // Insert into role-specific table
+    try {
+        switch ($role) {
+            case 'doctor':
+                // Doctors need license_number
+                if (!$license_number) {
+                    throw new Exception("License number is required for doctors");
+                }
+                $stmt = $conn->prepare("INSERT INTO doctors (user_id, first_name, last_name, phone_number, email, license_number) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("isssss", $user_id, $first_name, $last_name, $phone_number, $email, $license_number);
+                break;
+
+            case 'pharmacist':
+                // Pharmacists need license_number
+                if (!$license_number) {
+                    throw new Exception("License number is required for pharmacists");
+                }
+                $stmt = $conn->prepare("INSERT INTO pharmacists (user_id, first_name, last_name, phone_number, email, license_number) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("isssss", $user_id, $first_name, $last_name, $phone_number, $email, $license_number);
+                break;
+
+            case 'billing_officer':
+                $stmt = $conn->prepare("INSERT INTO billing_officers (user_id, first_name, last_name, phone_number, email) VALUES (?, ?, ?, ?, ?)");
+                $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $email);
+                break;
+
+            case 'receptionist':
+                $stmt = $conn->prepare("INSERT INTO receptionists (user_id, first_name, last_name, phone_number, email) VALUES (?, ?, ?, ?, ?)");
+                $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $email);
+                break;
+
+            case 'admin':
+                $stmt = $conn->prepare("INSERT INTO admins (user_id, first_name, last_name, phone_number, email) VALUES (?, ?, ?, ?, ?)");
+                $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $email);
+                break;
+
+            default:
+                throw new Exception("Invalid role");
+        }
+
+        if ($stmt->execute()) {
+            echo json_encode(["message" => "User registered successfully", "user_id" => $user_id, "role" => $role ]);
+        } else {
+            throw new Exception("Error inserting into role-specific table");
+        }
+
+    } catch (Exception $e) {
+        error_log("Registration error: " . $e->getMessage());
+        echo json_encode(["message" => "Registration failed: " . $e->getMessage()]);
     }
 
-    if ($stmt->execute()) {
-        // Send email with hospital number and password
-        if (sendEmail($email, $hospital_number, $password)) {
-            echo json_encode(["message" => ucfirst($role) . " registered successfully. Email sent!", "hospital_number" => $hospital_number]);
-        } else {
-            echo json_encode(["message" => "Registration successful, but email failed to send"]);
-        }
-    } else {
-        echo json_encode(["message" => "Error inserting into role table"]);
-    }
 } else {
     echo json_encode(["message" => "Error registering user"]);
 }
