@@ -118,11 +118,11 @@ if ($stmt->execute()) {
             $mail->Host = 'smtp.gmail.com'; 
             $mail->SMTPAuth = true;
             $mail->Username = 'adejsamuel@gmail.com';
-            $mail->Password = 'iyng nqfs zlpj ugah'; 
+            $mail->Password = process.env.SMTP_PASSWORD ; 
             $mail->SMTPSecure = 'tls'; 
             $mail->Port = 587; 
 
-            $mail->setFrom('your_email@example.com', 'Patient Registration');
+            $mail->setFrom('adejsamuel@gmail.com', 'Patient Registration');
             $mail->addAddress($email);
 
             // email image implementation
