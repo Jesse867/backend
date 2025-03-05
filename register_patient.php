@@ -22,9 +22,18 @@ if (!$data) {
 
 // List required fields (adjust as needed)
 $required = [
-    "firstName", "lastName", "dateOfBirth", "gender", "primaryPhoneNumber",
-    "email", "residentialAddress", "emergencyContact", "maritalStatus",
-    "consentForDataUsage", "password", "confirmPassword"
+    "firstName",
+    "lastName",
+    "dateOfBirth",
+    "gender",
+    "primaryPhoneNumber",
+    "email",
+    "residentialAddress",
+    "emergencyContact",
+    "maritalStatus",
+    "consentForDataUsage",
+    "password",
+    "confirmPassword"
 ];
 
 foreach ($required as $field) {
@@ -110,7 +119,7 @@ try {
     $checkStmt->close();
 } catch (Exception $e) {
     error_log("Error generating hospital number: " . $e->getMessage());
-    echo json_encode(["error" => "Error generating hospital number"]);
+    echo json_encode(["error" => "Error generating hospital number: " . $e->getMessage()]);
     exit;
 }
 
@@ -126,17 +135,17 @@ try {
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $stmt->store_result();
-    
+
     if ($stmt->num_rows > 0) {
         echo json_encode(["message" => "Email already registered"]);
         $stmt->close();
         exit;
     }
-    
+
     $stmt->close();
 } catch (Exception $e) {
     error_log("Error checking email: " . $e->getMessage());
-    echo json_encode(["error" => "Error checking email"]);
+    echo json_encode(["error" => "Error checking email: " . $e->getMessage()]);
     exit;
 }
 
@@ -144,56 +153,75 @@ try {
 try {
     $stmt = $conn->prepare("INSERT INTO users (email, password_hash, role, hospital_number) VALUES (?, ?, 'patient', ?)");
     $stmt->bind_param("sss", $email, $passwordHash, $hospital_number);
-    
+
     if ($stmt->execute()) {
         $user_id = $stmt->insert_id;
         $stmt->close();
 
         // Insert into `patients`
         $stmt = $conn->prepare("
-            INSERT INTO patients (
-                user_id, first_name, middle_name, last_name, date_of_birth, gender, 
-                photo_upload, primary_phone_number, alternate_phone_number, 
-                street, city, state, country, 
-                emergency_contact_name, emergency_contact_relationship, 
-                emergency_contact_phone, blood_group, known_allergies, 
-                pre_existing_conditions, primary_physician, 
-                insurance_number, insurance_provider, 
-                marital_status, occupation, consent_for_data_usage
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->bind_param("isssssssssssssssssssssssi", 
-            $user_id, $firstName, $middleName, $lastName, $dateOfBirth, $gender, 
-            $photoUpload, $primaryPhoneNumber, $alternatePhoneNumber, 
-            $street, $city, $state, $country, 
-            $emergencyName, $emergencyRelationship, 
-            $emergencyPhone, $bloodGroup, $knownAllergies, 
-            $preExistingConditions, $primaryPhysician, 
-            $insuranceNumber, $insuranceProvider, 
-            $maritalStatus, $occupation, $consentForDataUsage
+INSERT INTO patients (
+    user_id, hospital_number, first_name, middle_name, last_name, 
+    date_of_birth, gender, photo_upload, primary_phone_number, 
+    alternate_phone_number, street, city, state, country, 
+    emergency_contact_name, emergency_contact_relationship, 
+    emergency_contact_phone, blood_group, known_allergies, 
+    pre_existing_conditions, primary_physician, 
+    insurance_number, insurance_provider, 
+    marital_status, occupation, consent_for_data_usage
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+");
+        $stmt->bind_param(
+            "issssssssssssssssssssssssi",
+            $user_id,
+            $hospital_number,
+            $firstName,
+            $middleName,
+            $lastName,
+            $dateOfBirth,
+            $gender,
+            $photoUpload,
+            $primaryPhoneNumber,
+            $alternatePhoneNumber,
+            $street,
+            $city,
+            $state,
+            $country,
+            $emergencyName,
+            $emergencyRelationship,
+            $emergencyPhone,
+            $bloodGroup,
+            $knownAllergies,
+            $preExistingConditions,
+            $primaryPhysician,
+            $insuranceNumber,
+            $insuranceProvider,
+            $maritalStatus,
+            $occupation,
+            $consentForDataUsage
         );
-        
+
         if ($stmt->execute()) {
             $stmt->close();
-            
+
             // Send email with hospital number and password
             try {
                 $mail = new PHPMailer\PHPMailer\PHPMailer(true);
                 $mail->isSMTP();
-                $mail->Host = 'smtp.gmail.com'; 
+                $mail->Host = 'smtp.gmail.com';
                 $mail->SMTPAuth = true;
                 $mail->Username = 'adejsamuel@gmail.com';
-                $mail->Password = 'iyng nqfs zlpj ugah'; 
-                $mail->SMTPSecure = 'tls'; 
-                $mail->Port = 587; 
+                $mail->Password = 'iyng nqfs zlpj ugah';
+                $mail->SMTPSecure = 'tls';
+                $mail->Port = 587;
 
                 $mail->setFrom('adejsamuel@gmail.com', 'Patient Registration');
                 $mail->addAddress($email);
 
                 // email image implementation
-                $imagePath = 'assets/image/logo-full-light.png'; 
-                $image_cid = 'logo'; 
-                $altText = 'Carpulse Logo'; 
+                $imagePath = 'assets/image/logo-full-light.png';
+                $image_cid = 'logo';
+                $altText = 'Carpulse Logo';
                 $mail->addEmbeddedImage($imagePath, $image_cid, $altText);
 
                 $mail->isHTML(true);
@@ -209,25 +237,35 @@ try {
 
                 $mail->send();
                 echo json_encode([
-                    "message" => "Patient registered successfully. Confirmation email sent!", 
+                    "message" => "Patient registered successfully. Confirmation email sent!",
                     "hospital_number" => $hospital_number
                 ]);
             } catch (Exception $e) {
                 error_log("Email sending failed: " . $e->getMessage());
                 echo json_encode([
-                    "message" => "Registration successful, but email failed to send"
+                    "message" => "Registration successful, but email failed to send",
+                    "error" => $e->getMessage()
                 ]);
             }
         } else {
             $stmt->close();
-            echo json_encode(["message" => "Error inserting patient details"]);
+            error_log("Error inserting patient details: " . $conn->error);
+            echo json_encode([
+                "message" => "Error inserting patient details",
+                "error" => $conn->error
+            ]);
         }
     } else {
         $stmt->close();
-        echo json_encode(["message" => "Error registering patient"]);
+        error_log("Error registering patient: " . $conn->error);
+        echo json_encode([
+            "message" => "Error registering patient",
+            "error" => $conn->error
+        ]);
     }
 } catch (Exception $e) {
     error_log("Database error: " . $e->getMessage());
-    echo json_encode(["error" => "Database error occurred"]);
+    echo json_encode([
+        "error" => "Database error occurred: " . $e->getMessage()
+    ]);
 }
-?>

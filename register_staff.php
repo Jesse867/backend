@@ -10,6 +10,35 @@ require "db.php";
 try {
     $conn->begin_transaction();
 
+    // Handle file upload
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profile_picture'])) {
+        $targetDir = "assets/images/";
+        $fileName = basename($_FILES['profile_picture']['name']);
+        $targetPath = $targetDir . $fileName;
+
+        // Validate file type
+        $fileType = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION));
+        if (!in_array($fileType, ['jpg', 'jpeg', 'png', 'gif'])) {
+            throw new Exception("Invalid image format. Only JPG, PNG, and GIF are allowed.");
+        }
+
+        // Validate file size (5MB max)
+        if ($_FILES['profile_picture']['size'] > 5 * 1024 * 1024) {
+            throw new Exception("Image size exceeds 5MB limit.");
+        }
+
+        // Move uploaded file
+        if (!move_uploaded_file($_FILES['profile_picture']['tmp_name'], $targetPath)) {
+            throw new Exception("Failed to upload profile picture.");
+        }
+
+        // Generate unique filename to avoid conflicts
+        $uniqueFileName = uniqid() . "_" . $fileName;
+        $newPath = $targetDir . $uniqueFileName;
+        rename($targetPath, $newPath);
+        $profile_picture = $uniqueFileName;
+    }
+
     $json = file_get_contents("php://input");
     $data = json_decode($json, true);
 
@@ -18,8 +47,15 @@ try {
     }
 
     // Check required fields
-    if (!isset($data['email']) || !isset($data['password']) || !isset($data['first_name']) || !isset($data['last_name']) || !isset($data['role']) || !isset($data['phone_number'])) {
-        throw new Exception("Missing required fields");
+    $requiredFields = ['email', 'password', 'first_name', 'last_name', 'role', 'phone_number'];
+    if (isset($data['role']) && $data['role'] === 'doctor') {
+        $requiredFields = array_merge($requiredFields, ['license_number', 'years_of_experience', 'specialization', 'about']);
+    }
+
+    foreach ($requiredFields as $field) {
+        if (!isset($data[$field])) {
+            throw new Exception("Missing required field: $field");
+        }
     }
 
     $email = trim($data['email']);
@@ -29,6 +65,9 @@ try {
     $role = trim($data['role']);
     $phone_number = trim($data['phone_number']);
     $license_number = isset($data['license_number']) ? trim($data['license_number']) : null;
+    $years_of_experience = isset($data['years_of_experience']) ? (int)$data['years_of_experience'] : null;
+    $specialization = isset($data['specialization']) ? trim($data['specialization']) : null;
+    $about = isset($data['about']) ? trim($data['about']) : null;
 
     // Validate role
     $valid_roles = ['doctor', 'pharmacist', 'billing_officer', 'receptionist', 'admin'];
@@ -89,11 +128,11 @@ try {
     // Insert into role-specific table
     switch ($role) {
         case 'doctor':
-            if (!$license_number) {
-                throw new Exception("License number is required for doctors");
+            if (!$license_number || !$years_of_experience || !$specialization || !$about) {
+                throw new Exception("License number, years of experience, specialization, and about are required for doctors");
             }
-            $stmt = $conn->prepare("INSERT INTO doctors (user_id, first_name, last_name, phone_number, email, license_number) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isssss", $user_id, $first_name, $last_name, $phone_number, $email, $license_number);
+            $stmt = $conn->prepare("INSERT INTO doctors (user_id, first_name, last_name, phone_number, email, license_number, profile_picture, years_of_experience, specialization, about) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("issssssiss", $user_id, $first_name, $last_name, $phone_number, $email, $license_number, $profile_picture, $years_of_experience, $specialization, $about);
             break;
 
         case 'pharmacist':
@@ -130,13 +169,21 @@ try {
     $conn->commit();
     $stmt->close();
 
-    echo json_encode(["message" => "User registered successfully", "user_id" => $user_id, "role" => $role]);
-
+    // Return the profile picture URL in the response
+    $imageUrl = isset($profile_picture) ? "assets/images/$profile_picture" : null;
+    echo json_encode([
+        "message" => "User registered successfully",
+        "user_id" => $user_id,
+        "role" => $role,
+        "profile_picture" => $imageUrl
+    ]);
 } catch (Exception $e) {
     $conn->rollback();
     error_log("Registration error: " . $e->getMessage());
-    echo json_encode(["message" => "Registration failed: " . $e->getMessage()]);
+    echo json_encode([
+        "message" => "Registration failed: " . $e->getMessage(),
+        "error" => true
+    ]);
 } finally {
     $conn->close();
 }
-?>

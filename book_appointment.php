@@ -1,5 +1,8 @@
 <?php
 header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require "db.php";
@@ -48,7 +51,7 @@ $stmt->fetch();
 $stmt->close();
 
 // Lookup doctor_id based on doctor name (assuming names are unique)
-$stmt = $conn->prepare("SELECT doctor_id FROM doctors WHERE CONCAT(first_name, ' ', last_name) = ?");
+$stmt = $conn->prepare("SELECT doctor_id FROM doctors WHERE CONCAT('Doc', '', first_name, ' ', last_name) = ?");
 $stmt->bind_param("s", $doctorName);
 $stmt->execute();
 $stmt->store_result();
