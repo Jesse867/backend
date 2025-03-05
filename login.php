@@ -19,7 +19,7 @@ try {
 
     if (!$data || !isset($data['hospital_number']) || !isset($data['password'])) {
         echo json_encode([
-            "message" => "Missing hospital number or password", 
+            "message" => "Missing hospital number or password",
             "received" => $data,
             "success" => false
         ]);
@@ -35,7 +35,7 @@ try {
     // Fetch user and patient details from DB
     $stmt = $conn->prepare("
         SELECT 
-            u.user_id, u.password_hash, u.role,
+            u.user_id, u.password_hash, u.role, u.email,
             p.patient_id, p.first_name, p.middle_name, p.last_name,
             p.date_of_birth, p.gender, p.photo_upload,
             p.primary_phone_number, p.alternate_phone_number,
@@ -51,18 +51,18 @@ try {
         LEFT JOIN patients p ON u.hospital_number = p.hospital_number
         WHERE u.hospital_number = ?
     ");
-    
+
     $stmt->bind_param("s", $hospital_number);
     $stmt->execute();
-    
+
     $result = $stmt->get_result();
-    
+
     // Debug: Check if query returned any results
     error_log("Query Result Count: " . $result->num_rows);
 
     if ($result->num_rows > 0) {
         $row = $result->fetch_assoc();
-        
+
         // Debug: Print the fetched row
         error_log("Fetched User Data: " . print_r($row, true));
 
@@ -72,6 +72,7 @@ try {
                 "message" => "Login successful",
                 "success" => true,
                 "role" => $row['role'],
+                "email" => $row['email'],
                 "patient" => [
                     "firstName" => $row['first_name'],
                     "middleName" => $row['middle_name'],
@@ -103,7 +104,7 @@ try {
                     "consentForDataUsage" => (bool)$row['consent_for_data_usage']
                 ]
             ];
-            
+
             echo json_encode($response);
         } else {
             echo json_encode([
@@ -117,7 +118,7 @@ try {
             "success" => false
         ]);
     }
-    
+
     $stmt->close();
 } catch (Exception $e) {
     echo json_encode([
@@ -125,4 +126,3 @@ try {
         "success" => false
     ]);
 }
-?>

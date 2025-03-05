@@ -11,6 +11,8 @@ require "PHPMailer/src/PHPMailer.php";
 require "PHPMailer/src/SMTP.php";
 require "PHPMailer/src/Exception.php";
 
+
+
 // Read and decode JSON input
 $json = file_get_contents("php://input");
 $data = json_decode($json, true);
@@ -55,7 +57,6 @@ $middleName  = isset($data["middleName"]) ? trim($data["middleName"]) : "";
 $lastName    = trim($data["lastName"]);
 $dateOfBirth = trim($data["dateOfBirth"]); // Format: YYYY-MM-DD
 $gender      = trim($data["gender"]);
-$photoUpload = isset($data["photoUpload"]) ? trim($data["photoUpload"]) : "";
 $primaryPhoneNumber   = trim($data["primaryPhoneNumber"]);
 $alternatePhoneNumber = isset($data["alternatePhoneNumber"]) ? trim($data["alternatePhoneNumber"]) : "";
 $email       = trim($data["email"]);
@@ -88,6 +89,9 @@ $insuranceProvider = isset($healthInsurance["provider"]) ? trim($healthInsurance
 $maritalStatus = trim($data["maritalStatus"]);
 $occupation    = isset($data["occupation"]) ? trim($data["occupation"]) : "";
 $consentForDataUsage = $data["consentForDataUsage"] ? 1 : 0;
+
+// Handle file upload
+$profilePicture = isset($data["photoUpload"]) ? trim($data["photoUpload"]) : "";
 
 // Password: hash it
 $password = trim($data["password"]);
@@ -172,7 +176,7 @@ INSERT INTO patients (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
         $stmt->bind_param(
-            "issssssssssssssssssssssssi",
+            "iisssssssssssssssssssssssi",
             $user_id,
             $hospital_number,
             $firstName,
@@ -180,7 +184,7 @@ INSERT INTO patients (
             $lastName,
             $dateOfBirth,
             $gender,
-            $photoUpload,
+            $profilePicture,
             $primaryPhoneNumber,
             $alternatePhoneNumber,
             $street,
