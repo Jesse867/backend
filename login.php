@@ -35,7 +35,7 @@ try {
     // Fetch user and patient details from DB
     $stmt = $conn->prepare("
         SELECT 
-            u.user_id, u.password_hash, u.role, u.email,
+            u.user_id, u.password_hash, u.role, u.email, u.hospital_number,
             p.patient_id, p.first_name, p.middle_name, p.last_name,
             p.date_of_birth, p.gender, p.photo_upload,
             p.primary_phone_number, p.alternate_phone_number,
@@ -73,6 +73,7 @@ try {
                 "success" => true,
                 "role" => $row['role'],
                 "email" => $row['email'],
+                "hospitalNumber" => $row["hospital_number"],
                 "patient" => [
                     "firstName" => $row['first_name'],
                     "middleName" => $row['middle_name'],
