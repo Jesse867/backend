@@ -1,11 +1,26 @@
 <?php
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 require "db.php";
+
+// Handle preflight OPTIONS request
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Check if the request is a POST request
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode([
+        "success" => false,
+        "error" => "Only POST requests are allowed"
+    ]);
+    exit;
+}
 
 // Read and decode JSON input
 $json = file_get_contents("php://input");
@@ -128,23 +143,7 @@ try {
                 $yearsExperience = (int)$data["years_of_experience"];
                 $specialization = trim($data["specialization"]);
                 $about = trim($data["about"]);
-
-                // Validate profile picture if provided
-                if (isset($data["profile_picture"])) {
-                    $profilePicture = trim($data["profile_picture"]);
-                    // Validate URL format
-                    if (!filter_var($profilePicture, FILTER_VALIDATE_URL)) {
-                        throw new Exception("Invalid profile picture URL format");
-                    }
-                    // Check if URL points to an image
-                    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-                    $extension = strtolower(substr(strrchr($profilePicture, '.'), 1));
-                    if (!in_array($extension, $allowedExtensions)) {
-                        throw new Exception("Profile picture must be an image file");
-                    }
-                } else {
-                    $profilePicture = "";
-                }
+                $profilePicture = isset($data["profile_picture"]) ? trim($data["profile_picture"]) : "";
 
                 $stmt = $conn->prepare("
                     INSERT INTO doctors (
@@ -171,6 +170,7 @@ try {
 
             case 'pharmacist':
                 $licenseNumber = trim($data["license_number"]);
+
                 $stmt = $conn->prepare("
                     INSERT INTO pharmacists (
                         user_id, hospital_number, first_name, last_name, 
@@ -190,6 +190,7 @@ try {
                 break;
 
             case 'billing_officer':
+
                 $stmt = $conn->prepare("
                     INSERT INTO billing_officers (
                         user_id, hospital_number, first_name, last_name, 
@@ -203,11 +204,12 @@ try {
                     $firstName,
                     $lastName,
                     $phoneNumber,
-                    $email,
+                    $email
                 );
                 break;
 
             case 'receptionist':
+
                 $stmt = $conn->prepare("
                     INSERT INTO receptionists (
                         user_id, hospital_number, first_name, last_name, 
@@ -226,6 +228,7 @@ try {
                 break;
 
             case 'admin':
+
                 $stmt = $conn->prepare("
                     INSERT INTO admins (
                         user_id, hospital_number, first_name, last_name, 
@@ -249,19 +252,26 @@ try {
 
         if ($stmt->execute()) {
             $stmt->close();
-            echo json_encode(["success" => true, "message" => "Staff member added successfully"]);
+            echo json_encode([
+                "success" => true,
+                "message" => "Staff member added successfully",
+                "user_id" => $user_id,
+                "hospital_number" => $hospital_number
+            ]);
         } else {
             $stmt->close();
             error_log("Error inserting staff details: " . $conn->error);
             echo json_encode([
+                "success" => false,
                 "error" => "Error inserting staff details",
-                "message" => $conn->error
+                "message" . $conn->error
             ]);
         }
     } else {
         $stmt->close();
         error_log("Error registering staff: " . $conn->error);
         echo json_encode([
+            "success" => false,
             "error" => "Error registering staff",
             "message" => $conn->error
         ]);
@@ -269,7 +279,9 @@ try {
 } catch (Exception $e) {
     error_log("Database error: " . $e->getMessage());
     echo json_encode([
-        "error" => true,
-        "message" => "Database error occurred: " . $e->getMessage()
+        "success" => false,
+        "error" => "Database error occurred",
+        "message" => $e->getMessage()
     ]);
 }
+?>
