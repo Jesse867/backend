@@ -1,3 +1,4 @@
+
 <?php
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
@@ -125,7 +126,7 @@ function sendAppointmentConfirmation($conn, $appointmentId, $contactEmail, $appo
         $mail->SMTPSecure = 'tls';
         $mail->Port = 587;
 
-        $mail->setFrom('your_email@gmail.com', 'Appointment Confirmation');
+        $mail->setFrom('your_email@gmail.com', 'Appointment Booking');
         $mail->addAddress($contactEmail);
 
         // email image implementation
@@ -135,18 +136,55 @@ function sendAppointmentConfirmation($conn, $appointmentId, $contactEmail, $appo
         $mail->addEmbeddedImage($imagePath, $image_cid, $altText);
 
         $mail->isHTML(true);
-        $mail->Subject = 'Registration Confirmation';
+        $mail->Subject = 'Appointment Booking';
         $mail->Body = "
-            <img src='cid:$image_cid' alt='$altText' style='max-width: 150px; height: auto;'>
-            <h2>Appointment Confirmation<h2>
-            <br>
-            <p>Your appointment has been successfully booked.</p>
-            <p>Appointment ID: $appointmentId</p>
-            <p>Date and Time: $appointmentDatetime</p>
-            <p>Reason for Visit: $reasonForVisit</p>
-            <p>Status: pending</p>
-            <p>Thank you for choosing our services!</p>
-        ";
+    <div style='max-width: 800px; margin: 0 auto; font-family: Arial, sans-serif; color: #333333;'>
+        <!-- Header Section -->
+        <div style='text-align: center; padding: 20px 0;'>
+            <img src='cid:$image_cid' alt='$altText' style='max-width: 150px; height: auto; margin-bottom: 15px;'>
+            <h1 style='color: #2c3e50; font-size: 24px; margin: 0;'>Appointment Booking Confirmation</h1>
+            <p style='color: #7f8c8d; font-size: 14px;'>Thank you for choosing our services!</p>
+        </div>
+
+        <!-- Content Section -->
+        <div style='background-color: #f9f9f9; padding: 30px; border-radius: 8px; margin: 20px 0;'>
+            <div style='max-width: 600px; margin: 0 auto;'>
+                <p style='color: #34495e; font-size: 16px; margin-bottom: 15px;'>
+                    Your appointment has been successfully booked. We will get back to you when the
+                </p>
+
+                <!-- Appointment Details -->
+                <div style='background-color: #ffffff; padding: 25px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);'>
+                    <div style='margin-bottom: 15px;'>
+                        <strong style='color: #2c3e50; font-size: 14px; display: block; margin-bottom: 5px;'>Appointment ID:</strong>
+                        <span style='color: #7f8c8d; font-size: 14px;'>$appointmentId</span>
+                    </div>
+                    <div style='margin-bottom: 15px;'>
+                        <strong style='color: #2c3e50; font-size: 14px; display: block; margin-bottom: 5px;'>Date and Time:</strong>
+                        <span style='color: #7f8c8d; font-size: 14px;'>$appointmentDatetime</span>
+                    </div>
+                    <div style='margin-bottom: 15px;'>
+                        <strong style='color: #2c3e50; font-size: 14px; display: block; margin-bottom: 5px;'>Reason for Visit:</strong>
+                        <span style='color: #7f8c8d; font-size: 14px;'>$reasonForVisit</span>
+                    </div>
+                    <div style='margin-bottom: 15px;'>
+                        <strong style='color: #2c3e50; font-size: 14px; display: block; margin-bottom: 5px;'>Status:</strong>
+                        <span style='color: #27ae60; font-size: 14px; font-weight: bold;'>Pending</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Footer Section -->
+        <div style='text-align: center; padding: 20px 0; margin-top: 30px; border-top: 1px solid #e7e7e7;'>
+            <p style='color: #7f8c8d; font-size: 12px; margin: 0;'>
+                © 2024 CarePulse. All rights reserved.<br>
+                Contact us: hellocarepaulse@carepaulse.com | Tel: 0802 161 7030
+            </p>
+        </div>
+    </div>
+";
 
         $mail->send();
         return true;
@@ -170,6 +208,26 @@ try {
         echo json_encode(["message" => "Doctor not found"]);
         exit;
     }
+
+    // Check if doctor already has an appointment at this time
+    $checkQuery = "SELECT appointment_id FROM appointments 
+                   WHERE doctor_id = ? 
+                     AND DATE(appointment_datetime) = DATE(?) 
+                     AND TIME(appointment_datetime) = TIME(?)";
+    $stmt = $conn->prepare($checkQuery);
+    if (!$stmt) {
+        echo json_encode(["message" => "Prepare failed: " . $conn->error]);
+        exit;
+    }
+    $stmt->bind_param("iss", $doctor_id, $appointmentDatetime, $appointmentDatetime);
+    $stmt->execute();
+    $stmt->store_result();
+
+    if ($stmt->num_rows > 0) {
+        echo json_encode(["success" => false, "message" => "Doctor is already booked for this time"]);
+        exit;
+    }
+    $stmt->close();
 
     // Insert the appointment record into the database with status set to 'pending'
     $query = "INSERT INTO appointments (

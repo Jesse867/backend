@@ -1,25 +1,32 @@
-use this 
-
 <?php
 header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require "db.php";
 
-// Query to get all appointments along with patient details
+// Query to get all appointments along with patient and doctor details
 $query = "
     SELECT 
         a.appointment_id, 
         a.appointment_datetime, 
         a.reason_for_visit, 
-        a.contact_number AS appointment_contact, 
+        a.contact_email, 
+        a.status, 
         p.patient_id, 
         CONCAT(p.first_name, ' ', p.last_name) AS patient_name, 
-        p.primary_phone_number AS patient_contact
+        p.primary_phone_number AS patient_contact,
+        d.doctor_id,
+        CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+        d.specialization AS doctor_specialization
     FROM 
         appointments a
     JOIN 
         patients p ON a.patient_id = p.patient_id
+    JOIN 
+        doctors d ON a.doctor_id = d.doctor_id
 ";
 
 $result = $conn->query($query);

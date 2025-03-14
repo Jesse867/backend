@@ -231,13 +231,64 @@ INSERT INTO patients (
                 $mail->isHTML(true);
                 $mail->Subject = 'Registration Confirmation';
                 $mail->Body = "
-                    <img src='cid:$image_cid' alt='$altText' style='max-width: 150px; height: auto;'>
-                    <br>
-                    <h2>Thank you for registering with Carepulse!</h2>
-                    <p>Your hospital number: $hospital_number</p>
-                    <p>Your password: $password</p>
-                    <p>Please keep this information safe for future reference.</p>
-                ";
+    <div style='max-width: 800px; margin: 0 auto; font-family: Arial, sans-serif; color: #333333;'>
+        <!-- Header Section -->
+        <div style='text-align: center; padding: 20px 0;'>
+            <img src='cid:$image_cid' alt='$altText' style='max-width: 150px; height: auto; margin-bottom: 15px;'>
+            <h1 style='color: #2c3e50; font-size: 24px; margin: 0;'>Welcome to Carepulse!</h1>
+            <p style='color: #7f8c8d; font-size: 14px;'>Thank you for registering with us!</p>
+        </div>
+
+        <!-- Content Section -->
+        <div style='background-color: #f9f9f9; padding: 30px; border-radius: 8px; margin: 20px 0;'>
+            <div style='max-width: 600px; margin: 0 auto;'>
+                <p style='color: #34495e; font-size: 16px; margin-bottom: 15px;'>
+                    Your registration with Carepulse has been successfully completed. Below are your important details:
+                </p>
+
+                <!-- Registration Details -->
+                <div style='background-color: #ffffff; padding: 25px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);'>
+                    <div style='margin-bottom: 15px;'>
+                        <strong style='color: #2c3e50; font-size: 14px; display: block; margin-bottom: 5px;'>Hospital Number:</strong>
+                        <span style='color: #7f8c8d; font-size: 14px;'>$hospital_number</span>
+                    </div>
+                    <div style='margin-bottom: 15px;'>
+                        <strong style='color: #2c3e50; font-size: 14px; display: block; margin-bottom: 5px;'>Password:</strong>
+                        <span style='color: #7f8c8d; font-size: 14px;'>$password</span>
+                    </div>
+                </div>
+
+                <p style='color: #34495e; font-size: 16px; margin-top: 20px;'>
+                    Please keep your hospital number and password safe for future reference.
+                </p>
+
+                <!-- Call to Action -->
+                <div style='text-align: center; margin-top: 25px;'>
+                    <a href='[http://localhost:3000/patient/login]' style='
+                        display: inline-block;
+                        background-color: #3498db;
+                        color: white;
+                        padding: 10px 25px;
+                        border-radius: 5px;
+                        text-decoration: none;
+                        font-weight: bold;
+                        transition: background-color 0.3s ease;
+                    '>
+                        Login to Your Account
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Section -->
+        <div style='text-align: center; padding: 20px 0; margin-top: 30px; border-top: 1px solid #e7e7e7;'>
+            <p style='color: #7f8c8d; font-size: 12px; margin: 0;'>
+                 © 2024 CarePulse. All rights reserved.<br>
+                Contact us: hellocarepaulse@carepaulse.com | Tel: 0802 161 7030
+            </p>
+        </div>
+    </div>
+";
 
                 $mail->send();
                 echo json_encode([
