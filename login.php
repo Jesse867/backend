@@ -33,8 +33,7 @@ try {
     error_log("Login Request Data: " . print_r($data, true));
 
     // Fetch user and patient details from DB
-    $stmt = $conn->prepare("
-        SELECT 
+    $stmt = $conn->prepare("SELECT 
             u.user_id, u.password_hash, u.role, u.email, u.hospital_number,
             p.patient_id, p.first_name, p.middle_name, p.last_name,
             p.date_of_birth, p.gender, p.photo_upload,
@@ -49,8 +48,8 @@ try {
             p.marital_status, p.occupation, p.consent_for_data_usage
         FROM users u
         LEFT JOIN patients p ON u.hospital_number = p.hospital_number
-        WHERE u.hospital_number = ?
-    ");
+        WHERE u.hospital_number = ?"
+    );
 
     $stmt->bind_param("s", $hospital_number);
     $stmt->execute();
@@ -74,6 +73,7 @@ try {
                 "role" => $row['role'],
                 "email" => $row['email'],
                 "hospitalNumber" => $row["hospital_number"],
+                "patientId" => $row["patient_id"],
                 "patient" => [
                     "firstName" => $row['first_name'],
                     "middleName" => $row['middle_name'],

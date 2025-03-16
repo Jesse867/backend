@@ -1,10 +1,10 @@
 <?php
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Disable error output to response
+ini_set('display_errors', 0);
 require "db.php";
 
 // Handle preflight OPTIONS request
@@ -13,163 +13,275 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-try {
-    $conn->begin_transaction();
+// Check if the request is a POST request
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode([
+        "success" => false,
+        "error" => "Only POST requests are allowed"
+    ]);
+    exit;
+}
 
-    $json = file_get_contents("php://input");
-    $data = json_decode($json, true);
+// Read and decode JSON input
+$json = file_get_contents("php://input");
+$data = json_decode($json, true);
 
-    if (!$data) {
-        throw new Exception("Invalid JSON input");
+if (!$data) {
+    echo json_encode(["error" => "Invalid JSON input"]);
+    exit;
+}
+
+// List required fields based on role
+$requiredFields = [
+    "common" => ["email", "password", "confirmPassword", "first_name", "last_name", "role", "phone_number"],
+    "doctor" => ["license_number", "years_of_experience", "specialization", "about"],
+    "pharmacist" => ["license_number"],
+    "billing_officer" => [],
+    "receptionist" => [],
+    "admin" => []
+];
+
+// Validate common fields
+foreach ($requiredFields["common"] as $field) {
+    if (!isset($data[$field])) {
+        echo json_encode(["error" => "Missing field: $field"]);
+        exit;
     }
+}
 
-    // Check required fields
-    $requiredFields = ['email', 'password', 'first_name', 'last_name', 'role', 'phone_number'];
-    if (isset($data['role']) && $data['role'] === 'doctor') {
-        $requiredFields = array_merge($requiredFields, ['license_number', 'years_of_experience', 'specialization', 'about']);
-    }
-
-    foreach ($requiredFields as $field) {
+// Validate role-specific fields
+if (isset($requiredFields[$data["role"]])) {
+    foreach ($requiredFields[$data["role"]] as $field) {
         if (!isset($data[$field])) {
-            throw new Exception("Missing required field: $field");
+            echo json_encode(["error" => "Missing field: $field"]);
+            exit;
         }
     }
+}
 
-    $email = trim($data['email']);
-    $password = trim($data['password']);
-    $first_name = trim($data['first_name']);
-    $last_name = trim($data['last_name']);
-    $role = trim($data['role']);
-    $phone_number = trim($data['phone_number']);
-    $license_number = isset($data['license_number']) ? trim($data['license_number']) : null;
-    $years_of_experience = isset($data['years_of_experience']) ? (int)$data['years_of_experience'] : null;
-    $specialization = isset($data['specialization']) ? trim($data['specialization']) : null;
-    $about = isset($data['about']) ? trim($data['about']) : null;
-    $profilePicture = isset($data["profile_picture"]) ? trim($data["profile_picture"]) : "";
+// Check password match
+if ($data["password"] !== $data["confirmPassword"]) {
+    echo json_encode(["error" => "Passwords do not match"]);
+    exit;
+}
 
-    // Validate role
-    $valid_roles = ['doctor', 'pharmacist', 'billing_officer', 'receptionist', 'admin'];
-    if (!in_array($role, $valid_roles)) {
-        throw new Exception("Invalid role");
-    }
+// Retrieve and sanitize values
+$email = trim($data["email"]);
+$password = trim($data["password"]);
+$firstName = trim($data["first_name"]);
+$lastName = trim($data["last_name"]);
+$role = trim($data["role"]);
+$phoneNumber = trim($data["phone_number"]);
 
-    // Validate email
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        throw new Exception("Invalid email format");
-    }
+// Password: hash it
+$passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
-    // Check if email exists
-    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $stmt->store_result();
+// Generate unique 10-digit hospital ID
+$maxInt = 2147483647;
+$minInt = 1000000000;
+$hospital_number = random_int($minInt, $maxInt);
 
-    if ($stmt->num_rows > 0) {
-        throw new Exception("Email already registered");
-    }
-
-    $stmt->close();
-
-    // Generate unique 10-digit hospital ID
-    $maxInt = 2147483647;
-    $minInt = 1000000000;
-
-    $hospital_number = mt_rand($minInt, $maxInt);
-
-    // Check if this number already exists in the database
+try {
     $checkStmt = $conn->prepare("SELECT hospital_number FROM users WHERE hospital_number = ?");
     $checkStmt->bind_param("i", $hospital_number);
     $checkStmt->execute();
     $checkStmt->store_result();
 
     while ($checkStmt->num_rows > 0) {
-        $hospital_number = mt_rand($minInt, $maxInt);
+        $hospital_number = random_int($minInt, $maxInt);
         $checkStmt->bind_param("i", $hospital_number);
         $checkStmt->execute();
         $checkStmt->store_result();
     }
 
     $checkStmt->close();
-
-    // Hash password
-    $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-
-    // Insert user into `users`
-    $stmt = $conn->prepare("INSERT INTO users (email, password_hash, role, hospital_number) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssss", $email, $hashed_password, $role, $hospital_number);
-
-    if (!$stmt->execute()) {
-        throw new Exception("Error registering user: " . $stmt->error);
-    }
-
-    $user_id = $stmt->insert_id;
-    $stmt->close();
-
-    // Insert into role-specific table
-    switch ($role) {
-        case 'doctor':
-            if (!$license_number || !$years_of_experience || !$specialization || !$about) {
-                throw new Exception("License number, years of experience, specialization, and about are required for doctors");
-            }
-            $stmt = $conn->prepare("INSERT INTO doctors (user_id, first_name, last_name, phone_number, email, license_number, profile_picture, years_of_experience, specialization, about) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("issssssiss", $user_id, $first_name, $last_name, $phone_number, $email, $license_number, $profilePicture, $years_of_experience, $specialization, $about);
-            break;
-
-        case 'pharmacist':
-            if (!$license_number) {
-                throw new Exception("License number is required for pharmacists");
-            }
-            $stmt = $conn->prepare("INSERT INTO pharmacists (user_id, first_name, last_name, phone_number, email, license_number) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isssss", $user_id, $first_name, $last_name, $phone_number, $email, $license_number);
-            break;
-
-        case 'billing_officer':
-            $stmt = $conn->prepare("INSERT INTO billing_officers (user_id, first_name, last_name, phone_number, email) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $email);
-            break;
-
-        case 'receptionist':
-            $stmt = $conn->prepare("INSERT INTO receptionists (user_id, first_name, last_name, phone_number, email) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $email);
-            break;
-
-        case 'admin':
-            $stmt = $conn->prepare("INSERT INTO admins (user_id, first_name, last_name, phone_number, email) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("issss", $user_id, $first_name, $last_name, $phone_number, $email);
-            break;
-
-        default:
-            throw new Exception("Invalid role");
-    }
-
-    if (!$stmt->execute()) {
-        throw new Exception("Error inserting into role-specific table: " . $stmt->error);
-    }
-
-    $conn->commit();
-    $stmt->close();
-
-    // Return the profile picture URL in the response
-    $imageUrl = !empty($profilePicture) ? "assets/images/$profilePicture" : null;
-    
-    echo json_encode([
-        "success" => true,
-        "message" => "User registered successfully",
-        "user_id" => $user_id,
-        "role" => $role,
-        "profile_picture" => $imageUrl
-    ]);
 } catch (Exception $e) {
-    $conn->rollback();
-    error_log("Registration error: " . $e->getMessage());
+    error_log("Error generating hospital number: " . $e->getMessage());
+    echo json_encode(["error" => "Error generating hospital number"]);
+    exit;
+}
+
+// Validate email
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    echo json_encode(["error" => "Invalid email format"]);
+    exit;
+}
+
+// Check if email exists
+try {
+    $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $stmt->store_result();
+
+    if ($stmt->num_rows > 0) {
+        echo json_encode(["error" => "Email already registered"]);
+        $stmt->close();
+        exit;
+    }
+
+    $stmt->close();
+} catch (Exception $e) {
+    error_log("Error checking email: " . $e->getMessage());
+    echo json_encode(["error" => "Error checking email"]);
+    exit;
+}
+
+// Insert into `users`
+try {
+    $stmt = $conn->prepare("INSERT INTO users (email, password_hash, role, hospital_number) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("sssi", $email, $passwordHash, $role, $hospital_number);
+
+    if ($stmt->execute()) {
+        $user_id = $stmt->insert_id;
+        $stmt->close();
+
+        // Insert into role-specific table
+        switch ($role) {
+            case 'doctor':
+                $licenseNumber = trim($data["license_number"]);
+                $yearsExperience = (int)$data["years_of_experience"];
+                $specialization = trim($data["specialization"]);
+                $about = trim($data["about"]);
+                $profilePicture = isset($data["profile_picture"]) ? trim($data["profile_picture"]) : "";
+
+                $stmt = $conn->prepare("
+                    INSERT INTO doctors (
+                        user_id, hospital_number, first_name, last_name, 
+                        phone_number, email, license_number, profile_picture, 
+                        years_of_experience, specialization, about
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->bind_param(
+                    "iissssssiss",
+                    $user_id,
+                    $hospital_number,
+                    $firstName,
+                    $lastName,
+                    $phoneNumber,
+                    $email,
+                    $licenseNumber,
+                    $profilePicture,
+                    $yearsExperience,
+                    $specialization,
+                    $about
+                );
+                break;
+
+            case 'pharmacist':
+                $licenseNumber = trim($data["license_number"]);
+
+                $stmt = $conn->prepare("
+                    INSERT INTO pharmacists (
+                        user_id, hospital_number, first_name, last_name, 
+                        phone_number, email, license_number
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->bind_param(
+                    "iisssss",
+                    $user_id,
+                    $hospital_number,
+                    $firstName,
+                    $lastName,
+                    $phoneNumber,
+                    $email,
+                    $licenseNumber
+                );
+                break;
+
+            case 'billing_officer':
+
+                $stmt = $conn->prepare("
+                    INSERT INTO billing_officers (
+                        user_id, hospital_number, first_name, last_name, 
+                        phone_number, email
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->bind_param(
+                    "iissss",
+                    $user_id,
+                    $hospital_number,
+                    $firstName,
+                    $lastName,
+                    $phoneNumber,
+                    $email
+                );
+                break;
+
+            case 'receptionist':
+
+                $stmt = $conn->prepare("
+                    INSERT INTO receptionists (
+                        user_id, hospital_number, first_name, last_name, 
+                        phone_number, email
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->bind_param(
+                    "iissss",
+                    $user_id,
+                    $hospital_number,
+                    $firstName,
+                    $lastName,
+                    $phoneNumber,
+                    $email
+                );
+                break;
+
+            case 'admin':
+
+                $stmt = $conn->prepare("
+                    INSERT INTO admins (
+                        user_id, hospital_number, first_name, last_name, 
+                        phone_number, email
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->bind_param(
+                    "iissss",
+                    $user_id,
+                    $hospital_number,
+                    $firstName,
+                    $lastName,
+                    $phoneNumber,
+                    $email
+                );
+                break;
+
+            default:
+                throw new Exception("Invalid role");
+        }
+
+        if ($stmt->execute()) {
+            $stmt->close();
+            echo json_encode([
+                "success" => true,
+                "message" => "Staff member added successfully",
+                "user_id" => $user_id,
+                "hospital_number" => $hospital_number
+            ]);
+        } else {
+            $stmt->close();
+            error_log("Error inserting staff details: " . $conn->error);
+            echo json_encode([
+                "success" => false,
+                "error" => "Error inserting staff details",
+                "message" . $conn->error
+            ]);
+        }
+    } else {
+        $stmt->close();
+        error_log("Error registering staff: " . $conn->error);
+        echo json_encode([
+            "success" => false,
+            "error" => "Error registering staff",
+            "message" => $conn->error
+        ]);
+    }
+} catch (Exception $e) {
+    error_log("Database error: " . $e->getMessage());
     echo json_encode([
         "success" => false,
-        "message" => "Registration failed: " . $e->getMessage(),
-        "error" => true
+        "error" => "Database error occurred",
+        "message" => $e->getMessage()
     ]);
-} finally {
-    if (isset($conn) && $conn) {
-        $conn->close();
-    }
 }
 ?>

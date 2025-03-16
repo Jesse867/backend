@@ -232,7 +232,7 @@ function getUserDetailsByRole($conn, $user_id, $role) {
             $stmt = $conn->prepare("
                 SELECT 
                     admin_id, first_name, last_name, 
-                    phone_number, email, created_atgit 
+                    phone_number, email, created_at
                 FROM admins 
                 WHERE user_id = ?
             ");
