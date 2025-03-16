@@ -37,13 +37,21 @@ try {
         }
 
         // Set headers for file download
+        $mimeType = mime_content_type($filePath);
         header("Content-Description: File Transfer");
-        header("Content-Type: " . $attachment['type']);
-        header("Content-Disposition: attachment; filename=\"" . basename($filePath) . "\"");
+        header("Content-Type: $mimeType");
+        header("Content-Disposition: attachment; filename*=UTF-8''" . urlencode(basename($filePath)));
         header("Content-Length: " . filesize($filePath));
         header("Content-Transfer-Encoding: binary");
+        header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
+        header("Pragma: public");
 
-        readfile($filePath);
+        // Flush any existing output buffer
+        ob_clean();
+        flush();
+
+        // Read file in binary mode
+        readfile($filePath, false);
         exit;
     } else {
         // Multiple files download
@@ -66,13 +74,21 @@ try {
                 throw new Exception("File does not exist");
             }
 
+            $mimeType = mime_content_type($filePath);
             header("Content-Description: File Transfer");
-            header("Content-Type: " . $attachment['type']);
-            header("Content-Disposition: attachment; filename=\"" . basename($filePath) . "\"");
+            header("Content-Type: $mimeType");
+            header("Content-Disposition: attachment; filename*=UTF-8''" . urlencode(basename($filePath)));
             header("Content-Length: " . filesize($filePath));
             header("Content-Transfer-Encoding: binary");
+            header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
+            header("Pragma: public");
 
-            readfile($filePath);
+            // Flush any existing output buffer
+            ob_clean();
+            flush();
+
+            // Read file in binary mode
+            readfile($filePath, false);
             exit;
         } else {
             // Create zip archive for multiple files
@@ -94,10 +110,17 @@ try {
 
             // Send zip file to client
             header("Content-Type: application/zip");
-            header("Content-Disposition: attachment; filename=\"" . basename($zipFileName) . "\"");
+            header("Content-Disposition: attachment; filename*=UTF-8''" . urlencode(basename($zipFileName)));
             header("Content-Length: " . filesize($zipFileName));
+            header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
+            header("Pragma: public");
 
-            readfile($zipFileName);
+            // Flush any existing output buffer
+            ob_clean();
+            flush();
+
+            // Read file in binary mode
+            readfile($zipFileName, false);
             unlink($zipFileName); // Delete the zip file after sending
             exit;
         }
