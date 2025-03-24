@@ -144,6 +144,9 @@ try {
                 $specialization = trim($data["specialization"]);
                 $about = trim($data["about"]);
                 $profilePicture = isset($data["profile_picture"]) ? trim($data["profile_picture"]) : "";
+                if ($profilePicture === "") {
+                    $profilePicture = null; // Set to NULL if empty
+                }
 
                 $stmt = $conn->prepare("
                     INSERT INTO doctors (

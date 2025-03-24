@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Validate status if provided
     if (isset($data['status'])) {
-        $allowedStatus = array('paid', 'pending', 'cancelled', 'partially paid');
+        $allowedStatus = array('paid', 'pending', 'cancelled');
         if (!in_array($data['status'], $allowedStatus)) {
             http_response_code(400);
             echo json_encode(array("message" => "Invalid status. Allowed values: paid, pending, cancelled, partially paid"));
